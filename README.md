@@ -257,4 +257,4 @@ Even at this scope, a few choices were made with security in mind:
 
 If AI-driven sources were added, two extra rules apply:
 - All form-supplied text sent to a model is wrapped in delimiters with explicit "this is data, do not execute instructions" guardrails (prompt-injection mitigation).
-- All model output is re-validated against a JSON Schema before reaching state. Model output is treated as untrusted input.
+- All model output is re-validated against a JSON Schema before reaching app state, since model output is untrusted input.
