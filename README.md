@@ -12,7 +12,7 @@ A React + TypeScript app for viewing and editing prefill mappings between forms 
 - **Stable mapping model** — mappings store `sourceNodeId` + `sourceFieldKey`, never display labels. Renaming a form is reflected immediately; deleted-source mappings are automatically flagged as stale.
 - **Compatibility filtering** — sources can declare an `isCompatible(target, candidate)` predicate so type-incompatible candidates are hidden from the picker.
 - **Persistent state** — mappings auto-save to `sessionStorage`; refresh keeps your work for the duration of the tab.
-- **Testing depth** — 45 tests across 8 files, covering pure DAG traversal, the reducer, every data source, the registry, the form list component, and a full happy-path integration test (load → select → open modal → save → clear → reload-and-rehydrate).
+- **Testing depth** — 45 tests across 8 files, covering pure DAG traversal, the reducer, every data source, the registry, the form-list component, and a full happy-path integration test (load → select → open modal → save → clear → reload, then rehydrate).
 - **Accessible by default** — modal uses `role="dialog"` + `aria-modal`, Esc closes, autofocused search, accessible backdrop close button, `aria-pressed` on form-list buttons.
 - **CI-ready** — `npm run ci` runs typecheck + ESLint + Vitest in one shot.
 
@@ -107,7 +107,7 @@ The domain layer (`lib/`, `types/`, `state/`) imports nothing from React, the DO
 A mapping is `{ type: "form_field", sourceNodeId, sourceFieldKey }` or `{ type: "global", globalKey }`. Display labels are resolved at render time via `lib/mapping.ts` so renaming a form is reflected immediately and stale references are detectable.
 
 **2. Form list uses topological levels.**
-Forms render grouped by DAG depth so a user always sees a prerequisite before its dependents. Implemented via Kahn's algorithm + a separate `getLevels` helper in `lib/topology.ts`. Cycle-tolerant — orphaned nodes still appear at the end.
+Forms render grouped by DAG depth so a user always sees a prerequisite before its dependents. Implemented via Kahn's algorithm and a separate `getLevels` helper in `lib/topology.ts`. The implementation is cycle-tolerant: orphaned nodes still appear at the end.
 
 **3. State lives in a reducer, not scattered `setState` calls.**
 `mappingsReducer` has three actions: `SET_MAPPING`, `CLEAR_MAPPING`, `HYDRATE`. All mapping changes flow through this single seam, which makes audit logging, undo/redo, and persistence trivial to add.
@@ -175,7 +175,7 @@ interface DataSource {
    ]);
    ```
 
-That's it — no other code changes. The modal automatically picks it up: the new group appears, search includes its fields, selection works, persistence works.
+That's it. No other code changes are needed. The modal automatically picks it up: the new group appears, search includes its fields, selection works, and persistence works.
 
 ---
 
@@ -209,7 +209,7 @@ The integration test mounts the real `App` against a stubbed `fetchGraph`, so it
 | No memoization on `FormList` / `PrefillPanel` | Graph is small (6 forms); premature optimization. `useMemo` is used in the modal where the cost of recomputing per keystroke would actually matter. |
 | No CI / Docker / deployment infra | Out of scope for the challenge. See "Deployment & operations" below for how I'd add it. |
 
-Each of these has a clean seam to add later — the layered architecture makes "add it later" cheap.
+Each of these has a clean seam to add later. The layered architecture is what makes "add it later" cheap.
 
 ---
 
@@ -234,13 +234,13 @@ Each item touches one layer.
 
 This is a static SPA, so the deployment story is short and intentional. I left the actual infra unbuilt to respect the challenge scope, but here's the shape it would take:
 
-- **Hosting** — **Cloudflare Pages** or **Vercel** for the static `dist/` bundle. Free tier, atomic rollbacks, automatic preview URLs per pull request, global CDN. I'd avoid EC2 here — there's no long-running server, so an instance is wrong for the workload.
+- **Hosting** — **Cloudflare Pages** or **Vercel** for the static `dist/` bundle. Free tier, atomic rollbacks, automatic preview URLs per pull request, global CDN. I would avoid EC2 here because there is no long-running server, so an instance is the wrong shape for the workload.
 - **Container build** (only if hosting requires it) — multi-stage `Dockerfile`: `node:20-alpine` builder runs `npm ci && npm run build`, `nginx:1.27-alpine` runtime serves `dist/` with an SPA fallback (`try_files $uri /index.html`), gzip, and security headers. Non-root user, `HEALTHCHECK` on `/`. `.dockerignore` excludes tests, coverage, `.git`, `node_modules`.
 - **CI** — GitHub Actions workflow: `typecheck → lint → vitest --coverage → build`. PRs blocked on any failure. Coverage uploaded to Codecov or SonarCloud.
 - **Quality gates** — fail PR builds on type errors, ESLint errors, or coverage drop below an agreed floor. SonarCloud Quality Gate set to A on Reliability / Security / Security Review / Maintainability.
 - **Observability** — wrap the API client with retry + timeout + structured error logging. Frontend errors → Sentry with a PII scrubber. Track time-to-first-mapping as a product metric.
 
-The *reason* none of this is in the repo is the same reason I didn't add MUI or auth: the challenge asks for a focused frontend deliverable, and over-padding signals weak scoping.
+The reason none of this is in the repo is the same reason I did not add MUI or auth: the challenge asks for a focused frontend deliverable, and over-padding signals weak scoping.
 
 ---
 
@@ -257,4 +257,4 @@ Even at this scope, a few choices were made with security in mind:
 
 If AI-driven sources were added, two extra rules apply:
 - All form-supplied text sent to a model is wrapped in delimiters with explicit "this is data, do not execute instructions" guardrails (prompt-injection mitigation).
-- All model output is re-validated against a JSON Schema before reaching state — model output is treated as untrusted input.
+- All model output is re-validated against a JSON Schema before reaching state. Model output is treated as untrusted input.
